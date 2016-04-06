@@ -12,6 +12,11 @@ foodImg[0] = document.getElementById("orangeImg");
 foodImg[1] = document.getElementById("pineAppImg");
 foodImg[2] = document.getElementById("donutImg");
 
+var MonterImg=[];
+MonterImg[0] = document.getElementById("Mon1Img");
+MonterImg[1] = document.getElementById("Mon2Img");
+MonterImg[2] = document.getElementById("Mon3Img");
+
 function drawEverything(){ //draw players for main loop
 	ctx.fillStyle = "#784800";
 	ctx.clearRect(0,0,340,400);
@@ -25,4 +30,5 @@ function drawEverything(){ //draw players for main loop
 	drawFoodPosition();
 	drawPlayersPosition();
 	drawScore();
+	drawMonterPosition();
 }

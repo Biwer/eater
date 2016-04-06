@@ -14,6 +14,7 @@ var socket = io();
 setInterval(function(){		
 	drawEverything();
 	checkFoodCollision();
+	checkMonterCollision();
 },1000/25);
 
 
