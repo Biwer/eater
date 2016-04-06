@@ -15,6 +15,17 @@ app.use(favicon(__dirname + '/server/favicon.ico'));//not work
 serv.listen(2000);	//serv.listen(2000,'192.168.137.1');	
 
 var SOCKET_LIST = {};
+var playerList = {};
+function player(id,password,x,y,score){
+	var newPlayer = {
+		id:id,
+		password:password,
+		x:x,
+		y:y,
+		score:score
+	};
+	playerList[id] = newPlayer;
+}
 var io = require('socket.io')(serv,{});
 var playerCount = 0;
 var idLen = 20;
@@ -23,44 +34,49 @@ var HI_PLAYER = null;
 
 console.log(colors.green('\n==========[Server Started]==========\n'));
 
-var possibleIdChar = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+/*var possibleIdChar = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 var possibleLen = possibleIdChar.length;
 function generateId(){
     var text = "";
     for(var i = 0; i < idLen; i++)
         text += possibleIdChar.charAt(Math.floor(Math.random()*possibleLen));
     return text;
-}
+}*/
 
-io.sockets.on('connection', function(socket){
-	playerCount++;
-	socket.id = generateId();
-	socket.name = "";
-	socket.num = playerCount;
-	socket.score = 0;
-	socket.x = 170;
-	socket.y = 200;
-	socket.ip = socket.handshake.address;
-	SOCKET_LIST[socket.id] = socket;
-	
-	socket.emit('sendPlayerData', {
-		num: socket.num,
-		score: socket.score
-	});
-	
-	socket.on('playerEnterName', function(data){
-		socket.name = data.name;
-		socket.name = (socket.name).substring(0,6);
-		console.log(colors.green(' [Connect] ')+'ID:'+colors.yellow(socket.id)+', Name:'+colors.yellow(socket.name)+', Total:'+colors.yellow(playerCount));
+io.sockets.on('connection', function(socket){	
+	socket.emit('pleaseLogin');
+	socket.on('playerLogin', function(data){
+		data.id = (data.id).substring(0,6);
+		function socketConnect(){			
+			socket.id = (playerList[data.id].id).toString();			
+			socket.x = playerList[data.id].x;
+			socket.y = playerList[data.id].y;
+			socket.score = playerList[data.id].score;
+			socket.num = ++playerCount;
+			SOCKET_LIST[socket.id] = socket;
+			console.log(colors.green(' [Connect] ')+'ID:'+colors.yellow(socket.id)+', Number:'+colors.yellow(socket.num)+', Total:'+colors.yellow(playerCount));		
+			socket.emit('loginSuccessful', {
+				x: socket.x,
+				y: socket.y,
+				num: socket.num,
+				score: socket.score
+			});
+		}
+		if(playerList[data.id] == null){//first login
+			player(data.id,data.password,170,200,0);	
+			socketConnect();
+			
+		}
+		else if(SOCKET_LIST[data.id] == null && data.password == playerList[data.id].password){//has player data and not loged in
+			socketConnect();
+		}
+		else{
+			return;
+		}	
+		
 	});
 	
 	socket.on('playerMove', function(data){
-		/*console.log('move',socket.handshake.address);
-			if(!checkIP_Player(socket)){
-			console.log('not match');
-			return;
-		}*/
-
 		var speed = data.speed;
 		var canMove = false;
 		var new_x = socket.x;
@@ -105,17 +121,22 @@ io.sockets.on('connection', function(socket){
 		if(canMove){
 			socket.x = new_x;
 			socket.y = new_y;
-			console.log(colors.cyan(' [Move]')+' '+data.txt+','+colors.yellow(socket.name)+' to ('+colors.yellow(socket.x)+','+colors.yellow(socket.y)+')');
+			console.log(colors.cyan(' [Move]')+' '+data.txt+','+colors.yellow(socket.id)+' to ('+colors.yellow(socket.x)+','+colors.yellow(socket.y)+')');
 		}
 					
 	});
 	
 	socket.on('disconnect',function(){
-		playerCount--;
-		console.log(colors.red(' [Disconnect] ')+'ID:'+colors.yellow(socket.id)+', Name:'+colors.yellow(socket.name)+', Total:'+colors.yellow(playerCount));
+		if(playerList[socket.id] != null){
+			playerList[socket.id].x = socket.x;
+			playerList[socket.id].y = socket.y;
+			playerList[socket.id].score = socket.score;
+		}		
+		if(playerCount>0)playerCount--;
 		var disConNum = socket.num;
         delete SOCKET_LIST[socket.id];
 		deletePlayer(disConNum);
+		console.log(colors.red(' [Disconnect] ')+'ID:'+colors.yellow(socket.id)+', Name:'+colors.yellow(socket.id)+', Total:'+colors.yellow(playerCount));
     });
 	
 	function deletePlayer(disConNum){
@@ -137,9 +158,28 @@ io.sockets.on('connection', function(socket){
 		if(ateFood.x == socket.x && ateFood.y == socket.y){
 			socket.score++;
 			socket.emit('validPlayerScore',{score: socket.score});
-			console.log(colors.blue(' [Eat] ')+'food ID:'+colors.yellow(ateFood.id)+' by '+colors.yellow(socket.name)+' score:'+colors.yellow(socket.score));
+			console.log(colors.blue(' [Eat] ')+'food ID:'+colors.yellow(ateFood.id)+' by '+colors.yellow(socket.id)+' score:'+colors.yellow(socket.score));
 	        delete foodList[data.foodId]; 
 			sendFoodPack(); 
+		}
+		else{
+			console.log("Cheating!!!!!!!!!!!!!!!!!!!");
+		}
+    });
+	
+	socket.on('eatMonter',function(data){
+		ateMonter = MonterList[data.MonterId];
+		if(ateMonter == null)
+			return;		
+		if(ateMonter.x == socket.x && ateMonter.y == socket.y){
+			socket.score-=2;
+			if(socket.score<0){
+				socket.score=0;
+			}
+			socket.emit('validPlayerScore',{score: socket.score});
+			console.log(colors.blue(' [Eat] ')+'Monter ID:'+colors.yellow(ateMonter.id)+' by '+colors.yellow(socket.id)+' score:'+colors.yellow(socket.score));
+	        delete MonterList[data.MonterId]; 
+			sendMonterPack(); 
 		}
 		else{
 			console.log("Cheating!!!!!!!!!!!!!!!!!!!");
@@ -155,7 +195,7 @@ function sendPositionPack(){
 		pack.push({
 			x:		socket.x,
 			y:		socket.y,
-			name:	socket.name
+			name:	socket.id
 		});		
 	}		
 	for(var i in SOCKET_LIST){
@@ -177,7 +217,7 @@ function checkHiScore(){
 		var socket = SOCKET_LIST[i];		
 		socket.emit('updateHiScore', {
 			hiScore : HI_SCORE,
-			hiPlayer: HI_PLAYER.name 
+			hiPlayer: HI_PLAYER.id 
 		});
 	}
 }
@@ -215,6 +255,42 @@ function sendFoodPack(){
 	for(var i in SOCKET_LIST){
 		var socket = SOCKET_LIST[i];		
 		socket.emit('sendFoods', pack);
+	}
+}
+
+//===================================== Monter ======================================//
+var MonterList = {};//use {} because when deleted element, length change automatic.
+function Monter(id,x,y,width,height){
+	var type = Math.floor(Math.random()*3);
+	var newFood = {
+		id:id,
+		type:type,
+		x:x,
+		y:y,
+		width:width,
+		height:height	
+	};
+	MonterList[id] = newFood;
+}
+
+var MonterId = 0;
+
+function sendMonterPack(){
+	var pack = [];
+	for(var i in MonterList){
+		var Monter = MonterList[i];
+		pack.push({
+			id:		Monter.id,
+			type:	Monter.type,
+			x:		Monter.x,
+			y:		Monter.y,
+			width:	Monter.width,
+			height:	Monter.height
+		});	
+	}		
+	for(var i in SOCKET_LIST){
+		var socket = SOCKET_LIST[i];		
+		socket.emit('sendMonter', pack);
 	}
 }
 
@@ -275,6 +351,7 @@ setInterval(function(){
 	sendFoodPack();
 	sendWallPack();
 	checkHiScore();
+	sendMonterPack();
 },1000/25);
 
 setInterval(function(){
@@ -290,6 +367,17 @@ setInterval(function(){
 				blank = false;
 				//console.log("not blank");
 				break;
+			}
+		}
+		
+		if(blank){
+			for(var i in MonterList){
+				var aMonter = MonterList[i];
+				if(x == aMonter.x && y == aMonter.y){
+					blank = false;
+					//console.log("not blank");
+					break;
+				}
 			}
 		}
 		
@@ -319,5 +407,59 @@ setInterval(function(){
 		}	
 	}
 },2000);
+
+
+setInterval(function(){
+
+		var blank = true;
+		var x = Math.floor((Math.random()*11));
+		var y = Math.floor((Math.random()*13));
+		x = mapx[x];
+		y = mapy[y];
+		for(var i in MonterList){
+			var aMonter = MonterList[i];
+			if(x == aMonter.x && y == aMonter.y){
+				blank = false;
+				//console.log("not blank");
+				break;
+			}
+		}
+		
+		if(blank){
+			for(var i in foodList){
+				var afood = foodList[i];
+				if(x == afood.x && y == afood.y){
+					blank = false;
+					//console.log("not blank");
+					break;
+				}
+			}
+		}
+		if(blank){
+			for(var i in SOCKET_LIST){
+				var socket = SOCKET_LIST[i];
+				if(x == socket.x && y == socket.y){
+					blank = false;
+					break;
+				}
+			}
+		}	
+		
+		if(blank){
+			for(var i in wallList){
+				var wall = wallList[i];		
+				if(x == wall.x && y == wall.y){
+					blank = false;
+					break;
+				}
+			}	
+		}		
+		
+		if(blank){
+			Monter(MonterId,x,y,30,30);
+			MonterId++;
+			console.log("monster born id:",MonterId);
+		}	
+},5000);
 
 
